@@ -1,0 +1,72 @@
+trigger:
+- master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: validate
+  jobs: 
+  - job: validate
+    continueOnError: false
+    steps:
+    - task: TerraformInstaller@0
+      displayName: 'install'
+      inputs:
+        terraformVersion: '0.12.28'
+    - task: TerraformTaskV1@0
+      displayName: 'init'
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendServiceArm: 'azure-service-connection2'
+        backendAzureRmResourceGroupName: 'terraform-backend-self-hosted-rg'
+        backendAzureRmStorageAccountName: 'storageacctsaagent'
+        backendAzureRmContainerName: 'storagecontaineragent'
+        backendAzureRmKey: 'terraform-shagent.tfstate'
+    - task: TerraformTaskV1@0
+      displayName: 'validate'
+      inputs:
+        provider: 'azurerm'
+        command: 'validate'
+        workingDirectory: '$(System.DefaultWorkingDirectory)'
+- stage: deploy
+  jobs:
+  - deployment: deploy_terraform
+    continueOnError: false
+    environment: 'dev'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+            - task: TerraformInstaller@0
+              displayName: 'install'
+              inputs:
+                terraformVersion: '0.12.28'
+            - task: TerraformTaskV1@0
+              displayName: 'init'
+              inputs:
+                provider: 'azurerm'
+                command: 'init'
+                workingDirectory: '$(System.DefaultWorkingDirectory)'
+                backendServiceArm: 'Free Trial(35673775-259d-4c22-8c17-cd8aedb5240e)'
+                backendAzureRmResourceGroupName: 'terraform-backend-self-hosted-rg'
+                backendAzureRmStorageAccountName: 'storageacctsaagent'
+                backendAzureRmContainerName: 'storagecontaineragent'
+                backendAzureRmKey: 'terraform-shagent.tfstate'
+            - task: TerraformTaskV1@0
+              displayName: 'plan'
+              inputs:
+                provider: 'azurerm'
+                command: 'plan'
+                commandOptions: '-var devops_url=$(devops_url) -var devops_pat=$(devops_pat) -var devops_win_pat=$(devops_win_pat) -var="ssh_pub_key=$(ssh_pub_key)"'
+                environmentServiceNameAzureRM: 'Free Trial(35673775-259d-4c22-8c17-cd8aedb5240e)'
+            - task: TerraformTaskV1@0
+              displayName: 'apply'
+              inputs:
+                provider: 'azurerm'
+                command: 'apply'
+                workingDirectory: '$(System.DefaultWorkingDirectory)'
+                commandOptions: '-var devops_url=$(devops_url) -var devops_pat=$(devops_pat) -var devops_win_pat=$(devops_win_pat) -var="ssh_pub_key=$(ssh_pub_key)"'
+                environmentServiceNameAzureRM: 'azure-service-connection2'
